@@ -1,16 +1,15 @@
-
-import React from 'react';
-import { Users, BookOpen, Sparkles, ArrowRight } from 'lucide-react';
-import { usePoll } from '../context/PollContext';
+import React from "react";
+import { Users, BookOpen, Sparkles, ArrowRight } from "lucide-react";
+import { usePoll } from "../context/PollContext";
 
 const Home: React.FC = () => {
   const { setUser } = usePoll();
 
-  const selectRole = (role: 'teacher' | 'student') => {
+  const selectRole = (role: "teacher" | "student") => {
     const newUser = {
       id: Math.random().toString(36).substr(2, 9),
-      name: role === 'teacher' ? 'Dr. Smith' : 'Student',
-      role: role
+      name: role === "teacher" ? "Dr. Smith" : "Student",
+      role: role,
     };
     setUser(newUser);
   };
@@ -32,14 +31,15 @@ const Home: React.FC = () => {
               <span>Real-time Interactive Polling</span>
             </div>
             <h1 className="text-6xl font-bold text-gray-900 mb-8 tracking-tight">
-              Welcome to{' '}
+              Welcome to{" "}
               <span className="bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
                 LivePoll
               </span>
             </h1>
             <p className="text-xl text-gray-600 font-light max-w-3xl mx-auto leading-relaxed">
-              Create engaging polls, gather instant feedback, and make data-driven decisions with our 
-              modern real-time polling platform designed for educators and learners.
+              Create engaging polls, gather instant feedback, and make
+              data-driven decisions with our modern real-time polling platform
+              designed for educators and learners.
             </p>
           </div>
 
@@ -53,14 +53,16 @@ const Home: React.FC = () => {
                   <div className="w-20 h-20 bg-gradient-to-br from-purple-100 to-blue-100 rounded-3xl flex items-center justify-center mx-auto mb-8 group-hover:scale-110 transition-transform duration-300">
                     <Users className="h-10 w-10 text-purple-600" />
                   </div>
-                  <h3 className="text-3xl font-bold text-gray-900 mb-6">I'm a Student</h3>
+                  <h3 className="text-3xl font-bold text-gray-900 mb-6">
+                    I'm a Student
+                  </h3>
                   <p className="text-gray-600 leading-relaxed mb-8 text-lg">
-                    Join live polls, share your opinions, and see real-time results. 
-                    Participate actively in your learning experience.
+                    Join live polls, share your opinions, and see real-time
+                    results. Participate actively in your learning experience.
                   </p>
                 </div>
                 <button
-                  onClick={() => selectRole('student')}
+                  onClick={() => selectRole("student")}
                   className="w-full bg-gradient-to-r from-purple-600 to-purple-700 text-white px-8 py-5 rounded-2xl font-semibold hover:from-purple-700 hover:to-purple-800 transition-all duration-200 transform hover:scale-[1.02] shadow-lg hover:shadow-xl flex items-center justify-center space-x-2 group"
                 >
                   <span>Join as Student</span>
@@ -77,14 +79,16 @@ const Home: React.FC = () => {
                   <div className="w-20 h-20 bg-gradient-to-br from-blue-100 to-purple-100 rounded-3xl flex items-center justify-center mx-auto mb-8 group-hover:scale-110 transition-transform duration-300">
                     <BookOpen className="h-10 w-10 text-blue-600" />
                   </div>
-                  <h3 className="text-3xl font-bold text-gray-900 mb-6">I'm a Teacher</h3>
+                  <h3 className="text-3xl font-bold text-gray-900 mb-6">
+                    I'm a Teacher
+                  </h3>
                   <p className="text-gray-600 leading-relaxed mb-8 text-lg">
-                    Create engaging polls, manage live sessions, and analyze student responses 
-                    with comprehensive real-time analytics.
+                    Create engaging polls, manage live sessions, and analyze
+                    student responses with comprehensive real-time analytics.
                   </p>
                 </div>
                 <button
-                  onClick={() => selectRole('teacher')}
+                  onClick={() => selectRole("teacher")}
                   className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white px-8 py-5 rounded-2xl font-semibold hover:from-blue-700 hover:to-blue-800 transition-all duration-200 transform hover:scale-[1.02] shadow-lg hover:shadow-xl flex items-center justify-center space-x-2 group"
                 >
                   <span>Start as Teacher</span>
@@ -101,22 +105,34 @@ const Home: React.FC = () => {
                 <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mx-auto mb-4">
                   <Sparkles className="h-6 w-6 text-purple-600" />
                 </div>
-                <h4 className="font-semibold text-gray-900 mb-2">Real-time Results</h4>
-                <p className="text-gray-600 text-sm">See live updates as responses come in</p>
+                <h4 className="font-semibold text-gray-900 mb-2">
+                  Real-time Results
+                </h4>
+                <p className="text-gray-600 text-sm">
+                  See live updates as responses come in
+                </p>
               </div>
               <div className="p-6">
                 <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mx-auto mb-4">
                   <Users className="h-6 w-6 text-blue-600" />
                 </div>
-                <h4 className="font-semibold text-gray-900 mb-2">Easy Participation</h4>
-                <p className="text-gray-600 text-sm">Simple interface for seamless interaction</p>
+                <h4 className="font-semibold text-gray-900 mb-2">
+                  Easy Participation
+                </h4>
+                <p className="text-gray-600 text-sm">
+                  Simple interface for seamless interaction
+                </p>
               </div>
               <div className="p-6">
                 <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mx-auto mb-4">
                   <BookOpen className="h-6 w-6 text-green-600" />
                 </div>
-                <h4 className="font-semibold text-gray-900 mb-2">Instant Insights</h4>
-                <p className="text-gray-600 text-sm">Get immediate feedback and analytics</p>
+                <h4 className="font-semibold text-gray-900 mb-2">
+                  Instant Insights
+                </h4>
+                <p className="text-gray-600 text-sm">
+                  Get immediate feedback and analytics
+                </p>
               </div>
             </div>
           </div>
