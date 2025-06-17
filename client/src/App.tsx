@@ -1,55 +1,136 @@
+import React, { useEffect, useState } from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { useUser } from './contexts/UserContext';
+import TeacherDashboard from './components/TeacherDashboard';
+import StudentInterface from './components/StudentInterface';
+import Home from './pages/Home';
+import { Button } from './components/ui/button';
+import { Toaster } from './components/ui/toaster';
+import { LoadingOverlay } from './components/ui/spinner';
+import { socketService } from './services/socketService';
 
-import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { PollProvider, usePoll } from "./context/PollContext";
-import Header from "./components/Header";
-import Home from "./pages/Home";
-import TeacherDashboard from "./components/TeacherDashboard";
-import StudentInterface from "./components/StudentInterface";
-import NotFound from "./pages/NotFound";
+const App: React.FC = () => {
+  const { currentUser, logout } = useUser();
+  const [isInitializing, setIsInitializing] = useState(true);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-const queryClient = new QueryClient();
+  // Handle initial authentication check
+  useEffect(() => {
+    const initializeApp = async () => {
+      try {
+        const session = localStorage.getItem('polling_session');
+        if (session) {
+          const { token } = JSON.parse(session);
+          await socketService.connect(token);
+        }
+      } catch (error) {
+        console.error('Failed to initialize app:', error);
+        logout();
+      } finally {
+        setIsInitializing(false);
+      }
+    };
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <PollProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <div className="min-h-screen">
-            <Header />
-            <Routes>
-              <Route path="/" element={<AppContent />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
+    initializeApp();
+  }, [logout]);
+
+  const handleLogout = async () => {
+    try {
+      setIsLoggingOut(true);
+      await socketService.disconnect();
+      logout();
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
+
+  if (isInitializing) {
+    return <LoadingOverlay message="Initializing..." />;
+  }
+
+  return (
+    <>
+      {currentUser && (
+        <header className="bg-white border-b">
+          <div className="container mx-auto px-4 py-4 flex justify-between items-center">
+            <div className="flex items-center gap-4">
+              <h1 className="text-xl font-bold">Live Polling</h1>
+              <span className="text-sm text-gray-500">
+                Logged in as {currentUser.name} ({currentUser.role})
+              </span>
+            </div>
+            <Button 
+              variant="outline" 
+              onClick={handleLogout}
+              disabled={isLoggingOut}
+            >
+              {isLoggingOut ? 'Logging out...' : 'Logout'}
+            </Button>
           </div>
-        </BrowserRouter>
-      </PollProvider>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+        </header>
+      )}
 
-const AppContent = () => {
-  const { currentUser } = usePoll();
+      <main className={currentUser ? "min-h-[calc(100vh-64px)]" : "min-h-screen"}>
+        <Routes>
+          {/* Public route */}
+          <Route
+            path="/"
+            element={
+              currentUser ? (
+                <Navigate
+                  to={currentUser.role === 'teacher' ? '/teacher' : '/student'}
+                  replace
+                />
+              ) : (
+                <Home />
+              )
+            }
+          />
 
-  // Show appropriate interface based on user role
-  if (!currentUser) {
-    return <Home />;
-  }
+          {/* Protected routes */}
+          <Route
+            path="/teacher"
+            element={
+              !currentUser ? (
+                <Navigate to="/" replace />
+              ) : currentUser.role !== 'teacher' ? (
+                <Navigate to="/student" replace />
+              ) : (
+                <TeacherDashboard />
+              )
+            }
+          />
 
-  if (currentUser.role === 'teacher') {
-    return <TeacherDashboard />;
-  }
+          <Route
+            path="/student"
+            element={
+              !currentUser ? (
+                <Navigate to="/" replace />
+              ) : currentUser.role !== 'student' ? (
+                <Navigate to="/teacher" replace />
+              ) : (
+                <StudentInterface />
+              )
+            }
+          />
 
-  if (currentUser.role === 'student') {
-    return <StudentInterface />;
-  }
+          {/* Catch all unmatched routes */}
+          <Route
+            path="*"
+            element={
+              <Navigate
+                to={currentUser ? (currentUser.role === 'teacher' ? '/teacher' : '/student') : '/'}
+                replace
+              />
+            }
+          />
+        </Routes>
+      </main>
 
-  return <Home />;
+      {isLoggingOut && <LoadingOverlay message="Logging out..." />}
+      <Toaster />
+    </>
+  );
 };
 
 export default App;

@@ -1,61 +1,143 @@
-import { Server, Socket } from 'socket.io';
+import { Server } from 'socket.io';
 import Poll from '../models/Poll';
-import { CreatePollDto } from '../types/poll';
+import { CreatePollDto, PollState, VoteDto } from '../types/poll';
+import { socketAuth, SocketWithUser, ensureTeacher, ensureStudent } from '../middleware/socketAuth';
+import { serializePoll } from '../utils/serializers';
 
-export const setupPollHandlers = (io: Server, socket: Socket) => {
-  // Join a poll room
-  socket.on('join-poll', (pollId: string) => {
-    socket.join(pollId);
-    console.log(`Socket ${socket.id} joined poll ${pollId}`);
-  });
+export const setupPollHandlers = (io: Server) => {
+  // Apply authentication middleware
+  io.use(socketAuth);
 
-  // Create a new poll
-  socket.on('create-poll', async (pollData: CreatePollDto) => {
-    try {
-      const initialResults: { [key: string]: number } = {};
-      pollData.options.forEach(option => {
-        initialResults[option] = 0;
+  io.on('connection', (socket: SocketWithUser) => {
+    console.log('Client connected:', socket.id);
+
+    // Create new poll (teachers only)
+    socket.on('create-poll', async (pollData: CreatePollDto) => {
+      ensureTeacher(socket, (error) => {
+        if (error) {
+          socket.emit('error', { message: error.message });
+          return;
+        }
+
+        handleCreatePoll(socket, pollData, io);
       });
+    });
 
-      const newPoll = new Poll({
-        ...pollData,
-        results: initialResults
+    // Activate poll (teachers only)
+    socket.on('activate-poll', async (pollId: string) => {
+      ensureTeacher(socket, (error) => {
+        if (error) {
+          socket.emit('error', { message: error.message });
+          return;
+        }
+
+        handleActivatePoll(socket, pollId, io);
       });
+    });
 
-      await newPoll.save();
-      io.emit('poll-created', newPoll);
-    } catch (error) {
-      console.error('Error creating poll:', error);
-      socket.emit('poll-error', { message: 'Failed to create poll' });
-    }
-  });
+    // End poll (teachers only)
+    socket.on('end-poll', async (pollId: string) => {
+      ensureTeacher(socket, (error) => {
+        if (error) {
+          socket.emit('error', { message: error.message });
+          return;
+        }
 
-  // Submit vote
-  socket.on('submit-vote', async ({ pollId, option, voterId }: { pollId: string; option: string; voterId: string }) => {
-    try {
-      const poll = await Poll.findById(pollId);
-      if (!poll) {
-        throw new Error('Poll not found');
-      }
-
-      // Update poll results
-      const results = { ...poll.results };
-      results[option] = (results[option] || 0) + 1;
-      poll.results = results;
-      await poll.save();
-
-      // Broadcast updated results to all clients in the poll room
-      io.to(pollId).emit('poll-updated', {
-        pollId,
-        results: poll.results
+        handleEndPoll(socket, pollId, io);
       });
-    } catch (error) {
-      console.error('Error submitting vote:', error);
-      socket.emit('poll-error', { message: 'Failed to submit vote' });
-    }
-  });
+    });
 
-  socket.on('disconnect', () => {
-    console.log('Client disconnected:', socket.id);
+    // Submit vote (students only)
+    socket.on('submit-vote', async (data: VoteDto) => {
+      ensureStudent(socket, (error) => {
+        if (error) {
+          socket.emit('error', { message: error.message });
+          return;
+        }
+
+        handleSubmitVote(socket, data, io);
+      });
+    });
+
+    socket.on('disconnect', () => {
+      console.log('Client disconnected:', socket.id);
+    });
   });
 };
+
+// Handler functions
+async function handleCreatePoll(socket: SocketWithUser, pollData: CreatePollDto, io: Server) {
+  try {
+    if (!socket.user) throw new Error('User not authenticated');
+
+    const newPoll = new Poll({
+      ...pollData,
+      state: PollState.DRAFT,
+      createdBy: socket.user.id
+    });
+
+    await newPoll.save();
+    io.to('teacher').emit('poll-created', serializePoll(newPoll));
+  } catch (error) {
+    socket.emit('error', { 
+      message: error instanceof Error ? error.message : 'Failed to create poll'
+    });
+  }
+}
+
+async function handleActivatePoll(socket: SocketWithUser, pollId: string, io: Server) {
+  try {
+    const activatedPoll = await Poll.activatePoll(pollId);
+    if (!activatedPoll) {
+      throw new Error('Poll not found');
+    }
+
+    io.emit('poll-activated', serializePoll(activatedPoll));
+  } catch (error) {
+    socket.emit('error', { 
+      message: error instanceof Error ? error.message : 'Failed to activate poll'
+    });
+  }
+}
+
+async function handleEndPoll(socket: SocketWithUser, pollId: string, io: Server) {
+  try {
+    const endedPoll = await Poll.endPoll(pollId);
+    if (!endedPoll) {
+      throw new Error('Poll not found');
+    }
+
+    io.emit('poll-ended', serializePoll(endedPoll));
+  } catch (error) {
+    socket.emit('error', { 
+      message: error instanceof Error ? error.message : 'Failed to end poll'
+    });
+  }
+}
+
+async function handleSubmitVote(socket: SocketWithUser, data: VoteDto, io: Server) {
+  try {
+    if (!socket.user) throw new Error('User not authenticated');
+
+    const poll = await Poll.findById(data.pollId);
+    if (!poll) {
+      throw new Error('Poll not found');
+    }
+
+    if (poll.state !== PollState.LIVE) {
+      throw new Error('Poll is not active');
+    }
+
+    const updatedPoll = await poll.addVote(socket.user.id, data.option);
+    const serialized = serializePoll(updatedPoll);
+
+    io.emit('poll-updated', {
+      pollId: serialized.id,
+      results: serialized.results
+    });
+  } catch (error) {
+    socket.emit('error', { 
+      message: error instanceof Error ? error.message : 'Failed to submit vote'
+    });
+  }
+}

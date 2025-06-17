@@ -1,80 +1,137 @@
-import express, { Request, Response } from 'express';
+import express, { Request, Response, NextFunction } from 'express';
+import { Types } from 'mongoose';
 import Poll from '../models/Poll';
-import { CreatePollDto } from '../types/poll';
+import { PollState } from '../types/poll';
+import { JWTPayload, verifyToken } from '../utils/auth';
+import { serializePoll } from '../utils/serializers';
 
 const router = express.Router();
 
-// Get all active polls
-router.get('/', async (req: Request, res: Response) => {
+// Extend Express Request type
+interface RequestWithUser extends Request {
+  user?: JWTPayload;
+}
+
+// Middleware to verify authentication token
+const authenticateToken = (
+  req: RequestWithUser,
+  res: Response,
+  next: NextFunction
+) => {
   try {
-    const polls = await Poll.find({ isActive: true });
-    res.json(polls);
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) {
+      return res.status(401).json({ message: 'Authentication token missing' });
+    }
+
+    const user = verifyToken(token);
+    req.user = user;
+    next();
   } catch (error) {
+    return res.status(401).json({ message: 'Invalid token' });
+  }
+};
+
+// Middleware to ensure user exists
+const ensureUser = (
+  req: RequestWithUser,
+  res: Response,
+  next: NextFunction
+) => {
+  if (!req.user) {
+    return res.status(401).json({ message: 'User not authenticated' });
+  }
+  next();
+};
+
+// Get all polls (teachers see all, students see only active)
+router.get('/', [authenticateToken, ensureUser], async (
+  req: RequestWithUser,
+  res: Response
+) => {
+  try {
+    if (!req.user) return res.status(401).json({ message: 'User not authenticated' });
+
+    let polls;
+    if (req.user.role === 'teacher') {
+      polls = await Poll.find().sort({ createdAt: -1 });
+    } else {
+      polls = await Poll.find({ state: PollState.LIVE });
+    }
+
+    const serializedPolls = polls.map(serializePoll);
+    res.json(serializedPolls);
+  } catch (error) {
+    console.error('Error fetching polls:', error);
     res.status(500).json({ message: 'Error fetching polls' });
   }
 });
 
 // Get specific poll
-router.get('/:id', async (req: Request, res: Response) => {
+router.get('/:id', [authenticateToken, ensureUser], async (
+  req: RequestWithUser,
+  res: Response
+) => {
   try {
-    const poll = await Poll.findById(req.params.id);
+    if (!req.user) return res.status(401).json({ message: 'User not authenticated' });
+
+    const { id } = req.params;
+    if (!Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid poll ID' });
+    }
+
+    const poll = await Poll.findById(id);
     if (!poll) {
       return res.status(404).json({ message: 'Poll not found' });
     }
-    res.json(poll);
+
+    if (req.user.role === 'student' && poll.state !== PollState.LIVE) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    res.json(serializePoll(poll));
   } catch (error) {
+    console.error('Error fetching poll:', error);
     res.status(500).json({ message: 'Error fetching poll' });
   }
 });
 
-// Create new poll
-router.post('/', async (req: Request, res: Response) => {
-  try {
-    const pollData: CreatePollDto = req.body;
-    
-    // Initialize results object
-    const initialResults: { [key: string]: number } = {};
-    pollData.options.forEach(option => {
-      initialResults[option] = 0;
-    });
-
-    const newPoll = new Poll({
-      ...pollData,
-      results: initialResults
-    });
-
-    await newPoll.save();
-    res.status(201).json(newPoll);
-  } catch (error) {
-    res.status(500).json({ message: 'Error creating poll' });
-  }
-});
-
-// End a poll
-router.patch('/:id/end', async (req: Request, res: Response) => {
-  try {
-    const poll = await Poll.findById(req.params.id);
-    if (!poll) {
-      return res.status(404).json({ message: 'Poll not found' });
-    }
-
-    poll.isActive = false;
-    await poll.save();
-    res.json(poll);
-  } catch (error) {
-    res.status(500).json({ message: 'Error ending poll' });
-  }
-});
-
 // Get poll results
-router.get('/:id/results', async (req: Request, res: Response) => {
+router.get('/:id/results', [authenticateToken, ensureUser], async (
+  req: RequestWithUser,
+  res: Response
+) => {
   try {
-    const poll = await Poll.findById(req.params.id);
+    if (!req.user) return res.status(401).json({ message: 'User not authenticated' });
+
+    const { id } = req.params;
+    if (!Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid poll ID' });
+    }
+
+    const poll = await Poll.findById(id);
     if (!poll) {
       return res.status(404).json({ message: 'Poll not found' });
     }
-    res.json({ results: poll.results });
+
+    // Students can only see results of voted or ended polls
+    if (req.user.role === 'student' && 
+        poll.state === PollState.LIVE && 
+        !poll.votedUsers.includes(req.user.id)) {
+      return res.status(403).json({ message: 'Must vote to see results' });
+    }
+
+    const serialized = serializePoll(poll);
+    res.json({
+      id: serialized.id,
+      results: serialized.results,
+      state: poll.state,
+      totalVotes: poll.votedUsers.length
+    });
   } catch (error) {
+    console.error('Error fetching poll results:', error);
     res.status(500).json({ message: 'Error fetching poll results' });
   }
 });

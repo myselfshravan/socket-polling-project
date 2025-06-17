@@ -1,120 +1,190 @@
-
-import React, { createContext, useContext, useState, useEffect } from 'react';
-
-export interface Poll {
-  id: string;
-  question: string;
-  options: string[];
-  votes: number[];
-  isActive: boolean;
-  createdAt: Date;
-  createdBy: string;
-}
-
-export interface User {
-  id: string;
-  name: string;
-  role: 'teacher' | 'student';
-}
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { api } from '../services/api';
+import { useSocket } from '../hooks/useSocket';
+import { CreatePollDto, Poll, PollResults, VoteData } from '../types/poll';
+import { User } from '../types/user';
+import { useToast } from '../hooks/use-toast';
 
 interface PollContextType {
   polls: Poll[];
-  currentUser: User | null;
   activePoll: Poll | null;
-  createPoll: (question: string, options: string[]) => void;
-  votePoll: (pollId: string, optionIndex: number) => void;
-  setActivePoll: (pollId: string) => void;
-  endPoll: (pollId: string) => void;
+  currentUser: User | null;
+  loading: boolean;
+  error: string | null;
+  createPoll: (data: CreatePollDto) => void;
+  submitVote: (data: VoteData) => void;
+  setActivePoll: (poll: Poll | null) => void;
   setUser: (user: User) => void;
-  connectedUsers: number;
+  logout: () => void;
 }
 
 const PollContext = createContext<PollContextType | undefined>(undefined);
 
-export const usePoll = () => {
-  const context = useContext(PollContext);
-  if (!context) {
-    throw new Error('usePoll must be used within a PollProvider');
-  }
-  return context;
-};
-
-export const PollProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const PollProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [polls, setPolls] = useState<Poll[]>([]);
+  const [activePoll, setActivePoll] = useState<Poll | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [activePoll, setActivePollState] = useState<Poll | null>(null);
-  const [connectedUsers, setConnectedUsers] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const socket = useSocket();
+  const { toast } = useToast();
 
-  // Simulate real-time updates
+  // Load user from localStorage on mount
   useEffect(() => {
-    const interval = setInterval(() => {
-      setConnectedUsers(prev => prev + Math.floor(Math.random() * 3) - 1);
-    }, 5000);
-    return () => clearInterval(interval);
+    const storedUser = localStorage.getItem('pollUser');
+    if (storedUser) {
+      try {
+        setCurrentUser(JSON.parse(storedUser));
+      } catch (error) {
+        console.error('Error parsing stored user:', error);
+        localStorage.removeItem('pollUser');
+      }
+    }
   }, []);
 
-  const createPoll = (question: string, options: string[]) => {
-    if (!currentUser) return;
-    
-    const newPoll: Poll = {
-      id: Math.random().toString(36).substr(2, 9),
-      question,
-      options,
-      votes: new Array(options.length).fill(0),
-      isActive: false,
-      createdAt: new Date(),
-      createdBy: currentUser.id,
-    };
-    
-    setPolls(prev => [newPoll, ...prev]);
-  };
+  useEffect(() => {
+    loadPolls();
 
-  const votePoll = (pollId: string, optionIndex: number) => {
-    setPolls(prev => prev.map(poll => {
-      if (poll.id === pollId && poll.isActive) {
-        const newVotes = [...poll.votes];
-        newVotes[optionIndex]++;
-        return { ...poll, votes: newVotes };
+    socket.onPollCreated((poll) => {
+      const newPoll = {
+        ...poll,
+        endsAt: new Date(Date.now() + poll.duration * 1000)
+      };
+      setPolls((prevPolls) => [...prevPolls, newPoll]);
+
+      toast({
+        title: 'New Poll',
+        description: 'A new poll has been created',
+      });
+    });
+
+    socket.onPollUpdated((results) => {
+      setPolls((prevPolls) =>
+        prevPolls.map((poll) =>
+          poll.id === results.pollId
+            ? { ...poll, results: results.results }
+            : poll
+        )
+      );
+
+      if (activePoll?.id === results.pollId) {
+        setActivePoll((prev) =>
+          prev ? { ...prev, results: results.results } : null
+        );
       }
-      return poll;
-    }));
+    });
+
+    socket.onPollError((error) => {
+      setError(error.message);
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      });
+    });
+  }, [socket, activePoll, toast]);
+
+  const loadPolls = async () => {
+    try {
+      setLoading(true);
+      const fetchedPolls = await api.getAllPolls();
+      setPolls(fetchedPolls);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to load polls';
+      setError(message);
+      toast({
+        title: 'Error',
+        description: message,
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const setActivePoll = (pollId: string) => {
-    setPolls(prev => prev.map(poll => ({
-      ...poll,
-      isActive: poll.id === pollId
-    })));
-    
-    const poll = polls.find(p => p.id === pollId);
-    setActivePollState(poll || null);
+  const createPoll = async (data: CreatePollDto) => {
+    if (!currentUser) {
+      const message = 'You must be logged in to create a poll';
+      setError(message);
+      toast({
+        title: 'Error',
+        description: message,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      setLoading(true);
+      socket.createPoll({
+        ...data,
+        createdBy: currentUser.id
+      });
+      toast({
+        title: 'Success',
+        description: 'Poll created successfully',
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to create poll';
+      setError(message);
+      toast({
+        title: 'Error',
+        description: message,
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const endPoll = (pollId: string) => {
-    setPolls(prev => prev.map(poll => ({
-      ...poll,
-      isActive: poll.id === pollId ? false : poll.isActive
-    })));
-    setActivePollState(null);
+  const submitVote = (data: VoteData) => {
+    if (!currentUser) {
+      const message = 'You must be logged in to vote';
+      setError(message);
+      toast({
+        title: 'Error',
+        description: message,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    socket.submitVote({
+      ...data,
+      voterId: currentUser.id
+    });
   };
 
   const setUser = (user: User) => {
     setCurrentUser(user);
+    localStorage.setItem('pollUser', JSON.stringify(user));
   };
 
-  return (
-    <PollContext.Provider value={{
-      polls,
-      currentUser,
-      activePoll,
-      createPoll,
-      votePoll,
-      setActivePoll,
-      endPoll,
-      setUser,
-      connectedUsers
-    }}>
-      {children}
-    </PollContext.Provider>
-  );
+  const logout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem('pollUser');
+  };
+
+  const value = {
+    polls,
+    activePoll,
+    currentUser,
+    loading,
+    error,
+    createPoll,
+    submitVote,
+    setActivePoll,
+    setUser,
+    logout,
+  };
+
+  return <PollContext.Provider value={value}>{children}</PollContext.Provider>;
+};
+
+export const usePoll = () => {
+  const context = useContext(PollContext);
+  if (context === undefined) {
+    throw new Error('usePoll must be used within a PollProvider');
+  }
+  return context;
 };
