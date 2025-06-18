@@ -207,6 +207,30 @@ export const PollProvider: React.FC<{ children: React.ReactNode }> = ({ children
         voterId: currentUser.id
       };
       socketService.submitVote(voteData);
+
+      // Update the local state to reflect the vote immediately
+      if (activePoll && activePoll.id === pollId) {
+        setActivePoll(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            votedUsers: [...prev.votedUsers, currentUser.id]
+          };
+        });
+      }
+
+      // Also update in the polls array
+      setPolls(prev => 
+        prev.map(p => {
+          if (p.id === pollId) {
+            return {
+              ...p,
+              votedUsers: [...p.votedUsers, currentUser.id]
+            };
+          }
+          return p;
+        })
+      );
     } catch (err) {
       setError('Failed to submit vote');
       toast({
