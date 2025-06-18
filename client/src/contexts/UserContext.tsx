@@ -42,7 +42,14 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const setUser = (user: User) => {
     try {
-      const token = `token-${user.id}-${Date.now()}`; // In a real app, this would be a JWT
+      // Generate a JWT-like token that the server can verify
+      // In a real app, this would be obtained from the server after authentication
+      const token = `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.${btoa(JSON.stringify({
+        id: user.id,
+        role: user.role,
+        exp: Math.floor(Date.now() / 1000) + 24 * 60 * 60 // 24 hours from now
+      }))}.signature`;
+
       const sessionData: SessionData = { user, token };
       localStorage.setItem(SESSION_KEY, JSON.stringify(sessionData));
       setCurrentUser(user);

@@ -42,9 +42,7 @@ const Home: React.FC = () => {
       role
     };
 
-    // Save user to localStorage for persistence
-    localStorage.setItem('user', JSON.stringify(user));
-
+    // setUser will handle saving to localStorage
     setUser(user);
     toast({
       title: 'Welcome!',

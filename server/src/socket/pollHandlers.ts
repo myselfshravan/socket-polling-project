@@ -4,12 +4,12 @@ import { CreatePollDto, PollState, VoteDto } from '../types/poll';
 import { socketAuth, SocketWithUser, ensureTeacher, ensureStudent } from '../middleware/socketAuth';
 import { serializePoll } from '../utils/serializers';
 
+// Track active connections
+const activeConnections = new Map<string, { userId: string; role: string }>();
+
 export const setupPollHandlers = (io: Server) => {
   // Apply authentication middleware
   io.use(socketAuth);
-
-  // Track active connections
-  const activeConnections = new Map<string, { userId: string; role: string }>();
 
   io.on('connection', (socket: SocketWithUser) => {
     console.log('Client connected:', socket.id);
@@ -83,11 +83,11 @@ export const setupPollHandlers = (io: Server) => {
 
     socket.on('disconnect', () => {
       console.log('Client disconnected:', socket.id);
-      
+
       const connection = activeConnections.get(socket.id);
       if (connection) {
         activeConnections.delete(socket.id);
-        
+
         // Broadcast updated connection status
         io.emit('connection-status', {
           status: 'disconnected',
@@ -113,7 +113,7 @@ async function handleCreatePoll(socket: SocketWithUser, pollData: CreatePollDto,
     await newPoll.save();
     // Notify teachers about the new poll
     io.to('teacher').emit('poll-created', serializePoll(newPoll));
-    
+
     // Log the action
     console.log(`Poll created by ${socket.user.id}: ${newPoll.id}`);
   } catch (error) {
@@ -131,17 +131,17 @@ async function handleActivatePoll(socket: SocketWithUser, pollId: string, io: Se
     }
 
     const serializedPoll = serializePoll(activatedPoll);
-    
+
     // Notify everyone about the activated poll
     io.emit('poll-activated', serializedPoll);
-    
+
     // Notify teachers with additional details
     io.to('teacher').emit('poll-status', {
       action: 'activated',
       pollId: pollId,
       activeConnections: Array.from(activeConnections.values())
     });
-    
+
     // Log the action
     console.log(`Poll activated by ${socket.user?.id}: ${pollId}`);
   } catch (error) {
@@ -159,10 +159,10 @@ async function handleEndPoll(socket: SocketWithUser, pollId: string, io: Server)
     }
 
     const serializedPoll = serializePoll(endedPoll);
-    
+
     // Notify everyone about the ended poll
     io.emit('poll-ended', serializedPoll);
-    
+
     // Notify teachers with final results
     io.to('teacher').emit('poll-status', {
       action: 'ended',
@@ -170,7 +170,7 @@ async function handleEndPoll(socket: SocketWithUser, pollId: string, io: Server)
       finalResults: serializedPoll.results,
       participants: endedPoll.votedUsers.length
     });
-    
+
     // Log the action
     console.log(`Poll ended by ${socket.user?.id}: ${pollId}`);
   } catch (error) {
@@ -201,16 +201,16 @@ async function handleSubmitVote(socket: SocketWithUser, data: VoteDto, io: Serve
       pollId: serialized.id,
       results: serialized.results
     });
-    
+
     // Send detailed update to teachers
     io.to('teacher').emit('poll-status', {
       action: 'vote-submitted',
       pollId: data.pollId,
       voterId: socket.user.id,
-      totalVotes: Object.values(serialized.results).reduce((a, b) => a + b, 0),
+      totalVotes: Object.values(serialized.results as Record<string, number>).reduce((a, b) => a + b, 0),
       lastVoteTime: new Date().toISOString()
     });
-    
+
     // Log the action
     console.log(`Vote submitted for poll ${data.pollId} by ${socket.user.id}`);
   } catch (error) {

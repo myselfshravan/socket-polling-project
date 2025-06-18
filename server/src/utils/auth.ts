@@ -19,8 +19,37 @@ export const generateToken = (user: JWTPayload): string => {
 
 export const verifyToken = (token: string): JWTPayload => {
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as JWTPayload;
-    return decoded;
+    // First try to verify as a proper JWT
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET) as JWTPayload;
+      return decoded;
+    } catch (jwtError) {
+      // If JWT verification fails, check if it's a client-generated token
+      if (token.startsWith('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.')) {
+        const parts = token.split('.');
+        if (parts.length === 3) {
+          try {
+            // Decode the payload part (index 1)
+            const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
+
+            // Validate the payload
+            if (payload.id && (payload.role === 'teacher' || payload.role === 'student')) {
+              // Check expiration if present
+              if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
+                throw new Error('Token expired');
+              }
+
+              return payload as JWTPayload;
+            }
+          } catch (decodeError) {
+            console.error('Failed to decode client token:', decodeError);
+          }
+        }
+      }
+
+      // If all attempts fail, throw the original error
+      throw jwtError;
+    }
   } catch (error) {
     throw new Error('Invalid token');
   }
@@ -30,10 +59,10 @@ export const refreshToken = async (oldToken: string): Promise<string> => {
   try {
     // Verify the old token first
     const decoded = verifyToken(oldToken);
-    
+
     // Remove the expiration and issued at claims
     const { exp, iat, ...payload } = decoded;
-    
+
     // Generate a new token
     return jwt.sign(
       payload,

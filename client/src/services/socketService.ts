@@ -1,5 +1,6 @@
 import { io, Socket } from 'socket.io-client';
 import { SocketEvents, ServerEvents, Poll, CreatePollDto, VoteDto } from '../types/poll';
+import { config } from '../config/env';
 
 class SocketService {
   private socket: Socket | null = null;
@@ -18,7 +19,7 @@ class SocketService {
 
   connect(token: string): Socket {
     if (!this.socket) {
-      this.socket = io('http://localhost:5000', {
+      this.socket = io(config.socketUrl, {
         auth: { token },
         transports: ['websocket'],
         reconnection: true,
