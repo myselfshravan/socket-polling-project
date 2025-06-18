@@ -1,12 +1,15 @@
 import { Socket } from 'socket.io';
 import { ExtendedError } from 'socket.io/dist/namespace';
-import { verifyToken, JWTPayload } from '../utils/auth';
+import { verifyToken, refreshToken, JWTPayload } from '../utils/auth';
 
 interface SocketWithUser extends Socket {
   user?: JWTPayload;
+  sessionId?: string;
 }
 
-export const socketAuth = (
+const REFRESH_THRESHOLD = 5 * 60 * 1000; // 5 minutes in milliseconds
+
+export const socketAuth = async (
   socket: SocketWithUser,
   next: (err?: ExtendedError | undefined) => void
 ) => {
@@ -17,14 +20,42 @@ export const socketAuth = (
     }
 
     const user = verifyToken(token);
-    socket.user = user;
     
-    // Join role-based room
+    // Check if token needs refresh
+    if (user.exp && user.exp * 1000 - Date.now() < REFRESH_THRESHOLD) {
+      try {
+        const newToken = await refreshToken(token);
+        socket.emit('token-refresh', { token: newToken });
+      } catch (refreshError) {
+        console.error('Token refresh failed:', refreshError);
+        // Continue with current token if refresh fails
+      }
+    }
+
+    socket.user = user;
+    socket.sessionId = `${user.id}-${Date.now()}`;
+    
+    // Join role-based room and personal room
     socket.join(user.role);
+    socket.join(`user:${user.id}`);
+    
+    // Set up ping/pong for connection monitoring
+    const pingInterval = setInterval(() => {
+      socket.emit('ping');
+    }, 30000);
+
+    socket.on('pong', () => {
+      socket.emit('connection-status', { status: 'connected' });
+    });
+
+    socket.on('disconnect', () => {
+      clearInterval(pingInterval);
+    });
     
     next();
   } catch (error) {
-    next(new Error('Authentication failed'));
+    const errorMessage = error instanceof Error ? error.message : 'Authentication failed';
+    next(new Error(errorMessage));
   }
 };
 

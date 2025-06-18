@@ -1,20 +1,20 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { api } from '../services/api';
 import { useSocket } from '../hooks/useSocket';
-import { CreatePollDto, Poll, PollResults, VoteData } from '../types/poll';
-import { User } from '../types/user';
+import { CreatePollDto, Poll, PollResults, VoteDto } from '../types/poll';
+import { User, SessionData } from '../types/user';
 import { useToast } from '../hooks/use-toast';
 
 interface PollContextType {
   polls: Poll[];
   activePoll: Poll | null;
-  currentUser: User | null;
+  currentUser: SessionData | null;
   loading: boolean;
   error: string | null;
   createPoll: (data: CreatePollDto) => void;
-  submitVote: (data: VoteData) => void;
+  submitVote: (data: VoteDto) => void;
   setActivePoll: (poll: Poll | null) => void;
-  setUser: (user: User) => void;
+  setUser: (session: SessionData) => void;
   logout: () => void;
 }
 
@@ -23,10 +23,13 @@ const PollContext = createContext<PollContextType | undefined>(undefined);
 export const PollProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [polls, setPolls] = useState<Poll[]>([]);
   const [activePoll, setActivePoll] = useState<Poll | null>(null);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<SessionData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const socket = useSocket();
+  const socket = useSocket(currentUser?.token || null);
+  
+  // Access user data from session
+  const userData = currentUser?.user;
   const { toast } = useToast();
 
   // Load user from localStorage on mount
@@ -118,7 +121,7 @@ export const PollProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setLoading(true);
       socket.createPoll({
         ...data,
-        createdBy: currentUser.id
+        createdBy: userData?.id
       });
       toast({
         title: 'Success',
@@ -137,7 +140,7 @@ export const PollProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  const submitVote = (data: VoteData) => {
+  const submitVote = (data: VoteDto) => {
     if (!currentUser) {
       const message = 'You must be logged in to vote';
       setError(message);
@@ -151,13 +154,13 @@ export const PollProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     socket.submitVote({
       ...data,
-      voterId: currentUser.id
+      voterId: userData?.id
     });
   };
 
-  const setUser = (user: User) => {
-    setCurrentUser(user);
-    localStorage.setItem('pollUser', JSON.stringify(user));
+  const setUser = (session: SessionData) => {
+    setCurrentUser(session);
+    localStorage.setItem('pollUser', JSON.stringify(session));
   };
 
   const logout = () => {

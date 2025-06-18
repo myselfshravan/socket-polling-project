@@ -15,6 +15,8 @@ export interface Poll {
   createdAt: string;
   activatedAt?: string;
   endedAt?: string;
+  duration?: number; // Duration in seconds
+  endsAt?: Date; // Calculated end time
 }
 
 export interface CreatePollDto {
