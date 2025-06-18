@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { socketService } from '../services/socketService';
+import { api } from '../services/api';
 import { Poll, PollState, CreatePollDto, VoteDto } from '../types/poll';
 import { useUser } from './UserContext';
 import { useToast } from '../hooks/use-toast';
@@ -22,9 +23,34 @@ export const PollProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [activePoll, setActivePoll] = useState<Poll | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   const { currentUser } = useUser();
   const { toast } = useToast();
+
+  // Load polls function
+  const loadPolls = async () => {
+    try {
+      setLoading(true);
+      const fetchedPolls = await api.getAllPolls();
+      setPolls(fetchedPolls);
+
+      // Set active poll if there's a live poll
+      const livePoll = fetchedPolls.find(poll => poll.state === PollState.LIVE);
+      if (livePoll) {
+        setActivePoll(livePoll);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to load polls';
+      setError(message);
+      toast({
+        title: 'Error',
+        description: message,
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Connect to socket when user is authenticated
   useEffect(() => {
@@ -32,6 +58,9 @@ export const PollProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const token = localStorage.getItem('polling_session');
       if (token) {
         socketService.connect(token);
+
+        // Load initial polls
+        loadPolls();
 
         // Set up socket event listeners
         const unsubscribeCreated = socketService.onPollCreated((poll) => {

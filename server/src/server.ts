@@ -20,9 +20,7 @@ const httpServer = createServer(app);
 // Create Socket.IO server
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.NODE_ENV === 'production' 
-      ? process.env.CORS_ORIGIN 
-      : 'http://localhost:5173',
+    origin: process.env.CORS_ORIGIN || 'http://localhost:8080',
     methods: ['GET', 'POST'],
     credentials: true
   },
@@ -33,9 +31,7 @@ const io = new Server(httpServer, {
 // Express middleware
 app.use(express.json());
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production'
-    ? process.env.CORS_ORIGIN
-    : 'http://localhost:5173',
+  origin: process.env.CORS_ORIGIN || 'http://localhost:8080',
   credentials: true
 }));
 
@@ -71,7 +67,7 @@ const checkExpiredPolls = async () => {
       activePoll.state = PollState.ENDED;
       activePoll.endedAt = new Date();
       const savedPoll = await activePoll.save();
-      
+
       io.emit('poll-ended', serializePoll(savedPoll));
     }
   } catch (error) {

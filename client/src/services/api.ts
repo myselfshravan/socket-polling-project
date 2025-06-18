@@ -6,6 +6,21 @@ const axiosInstance = axios.create({
   baseURL: `${config.apiUrl}/api`
 });
 
+// Add a request interceptor to include the authentication token
+axiosInstance.interceptors.request.use(
+  (config) => {
+    const sessionData = localStorage.getItem('polling_session');
+    if (sessionData) {
+      const { token } = JSON.parse(sessionData);
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
 export const api = {
   // Poll endpoints
   async createPoll(pollData: CreatePollDto): Promise<Poll> {

@@ -1,10 +1,12 @@
-import { io } from 'socket.io-client';
+import { io, Socket } from 'socket.io-client';
 import { config } from '../config/env';
-import { CreatePollDto, Poll, PollResults, PollSocket, VoteData } from '../types/poll';
+import { CreatePollDto, Poll, PollResults, VoteDto } from '../types/poll';
 
 class SocketService {
-  private socket: PollSocket | null = null;
+  private socket: Socket | null = null;
   private static instance: SocketService;
+  private reconnectAttempts = 5;
+  private reconnectDelay = 1000;
 
   private constructor() {}
 
@@ -15,35 +17,38 @@ class SocketService {
     return SocketService.instance;
   }
 
-  connect(): PollSocket {
+  connect(token: string): Socket {
     if (!this.socket) {
       this.socket = io(config.socketUrl, {
+        auth: { token },
         transports: ['websocket'],
-        autoConnect: true,
         reconnection: true,
-        reconnectionAttempts: 5,
-        reconnectionDelay: 1000
-      }) as PollSocket;
+        reconnectionAttempts: this.reconnectAttempts,
+        reconnectionDelay: this.reconnectDelay
+      });
 
-      this.setupBasicEventHandlers();
+      this.setupConnectionHandlers();
     }
-
     return this.socket;
   }
 
-  private setupBasicEventHandlers(): void {
+  private setupConnectionHandlers() {
     if (!this.socket) return;
 
     this.socket.on('connect', () => {
-      console.log('Connected to Socket.IO server');
+      console.log('Connected to socket server');
     });
 
     this.socket.on('disconnect', () => {
-      console.log('Disconnected from Socket.IO server');
+      console.log('Disconnected from socket server');
     });
 
-    this.socket.on('connect_error', (error) => {
+    this.socket.on('connect_error', (error: Error) => {
       console.error('Socket connection error:', error);
+    });
+
+    this.socket.on('error', (error: { message: string }) => {
+      console.error('Socket error:', error.message);
     });
   }
 
@@ -54,71 +59,65 @@ class SocketService {
     }
   }
 
-  // Specific event emitters
-  joinPoll(pollId: string): void {
+  private emit<T extends keyof ServerEvents>(event: T, data: ServerEvents[T]): void {
     if (!this.socket) {
-      console.error('Socket not connected. Cannot join poll');
+      console.error('Socket not connected');
       return;
     }
-    this.socket.emit('join-poll', pollId);
+    this.socket.emit(event, data);
   }
 
-  createPoll(data: CreatePollDto): void {
-    if (!this.socket) {
-      console.error('Socket not connected. Cannot create poll');
-      return;
-    }
-    this.socket.emit('create-poll', data);
+  // Poll Creation
+  createPoll(data: CreatePollDto) {
+    this.emit('create-poll', data);
   }
 
-  submitVote(data: VoteData): void {
-    if (!this.socket) {
-      console.error('Socket not connected. Cannot submit vote');
-      return;
-    }
-    this.socket.emit('submit-vote', data);
+  // Poll Activation
+  activatePoll(pollId: string) {
+    this.emit('activate-poll', pollId);
   }
 
-  // Specific event listeners
-  onPollCreated(callback: (poll: Poll) => void): void {
-    if (!this.socket) {
-      console.error('Socket not connected. Cannot listen for poll creation');
-      return;
-    }
+  // Poll Ending
+  endPoll(pollId: string) {
+    this.emit('end-poll', pollId);
+  }
+
+  // Vote Submission
+  submitVote(data: VoteDto) {
+    this.emit('submit-vote', data);
+  }
+
+  // Event Listeners
+  onPollCreated(callback: (poll: Poll) => void): () => void {
+    if (!this.socket) return () => {};
     this.socket.on('poll-created', callback);
+    return () => this.socket?.off('poll-created', callback);
   }
 
-  onPollUpdated(callback: (results: PollResults) => void): void {
-    if (!this.socket) {
-      console.error('Socket not connected. Cannot listen for poll updates');
-      return;
-    }
+  onPollActivated(callback: (poll: Poll) => void): () => void {
+    if (!this.socket) return () => {};
+    this.socket.on('poll-activated', callback);
+    return () => this.socket?.off('poll-activated', callback);
+  }
+
+  onPollEnded(callback: (poll: Poll) => void): () => void {
+    if (!this.socket) return () => {};
+    this.socket.on('poll-ended', callback);
+    return () => this.socket?.off('poll-ended', callback);
+  }
+
+  onPollUpdated(callback: (results: PollResults) => void): () => void {
+    if (!this.socket) return () => {};
     this.socket.on('poll-updated', callback);
+    return () => this.socket?.off('poll-updated', callback);
   }
 
-  onPollError(callback: (error: { message: string }) => void): void {
-    if (!this.socket) {
-      console.error('Socket not connected. Cannot listen for poll errors');
-      return;
-    }
-    this.socket.on('poll-error', callback);
+  onError(callback: (error: { message: string }) => void): () => void {
+    if (!this.socket) return () => {};
+    this.socket.on('error', callback);
+    return () => this.socket?.off('error', callback);
   }
 
-  // Remove specific event listeners
-  offPollCreated(callback: (poll: Poll) => void): void {
-    if (!this.socket) return;
-    this.socket.off('poll-created', callback);
-  }
-
-  offPollUpdated(callback: (results: PollResults) => void): void {
-    if (!this.socket) return;
-    this.socket.off('poll-updated', callback);
-  }
-
-  offPollError(callback: (error: { message: string }) => void): void {
-    if (!this.socket) return;
-    this.socket.off('poll-error', callback);
-  }
 
   isConnected(): boolean {
     return this.socket?.connected || false;
