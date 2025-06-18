@@ -10,12 +10,10 @@ import { Progress } from './ui/progress';
 import { useToast } from '../hooks/use-toast';
 
 const StudentInterface: React.FC = () => {
-  const { polls, submitVote, loading } = usePoll();
+  const { polls, activePoll, submitVote, loading } = usePoll();
   const { currentUser } = useUser();
   const { toast } = useToast();
   const [selectedOption, setSelectedOption] = useState<string>('');
-
-  const activePoll = polls.find(poll => poll.state === PollState.LIVE);
 
   // Reset selected option when active poll changes
   useEffect(() => {
