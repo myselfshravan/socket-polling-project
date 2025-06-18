@@ -1,6 +1,6 @@
 import { io, Socket } from 'socket.io-client';
 import { config } from '../config/env';
-import { CreatePollDto, Poll, PollResults, VoteDto } from '../types/poll';
+import {CreatePollDto, Poll, PollResults, ServerEvents, VoteDto} from '../types/poll';
 
 class SocketService {
   private socket: Socket | null = null;
