@@ -25,6 +25,18 @@ A real-time polling system for teachers to create and manage polls while student
 - Automatic reconnection handling
 - Rate limiting & security measures
 
+## Screenshots
+<img width="1178" alt="image" src="https://github.com/user-attachments/assets/b1755e15-11a7-45f9-9f70-5f9ee94f391f" />
+<img width="1182" alt="image" src="https://github.com/user-attachments/assets/9d9c698e-b557-4296-902f-039035b3cd21" />
+<img width="421" alt="image" src="https://github.com/user-attachments/assets/446825b1-3c14-41a2-81dd-b52a9cbf471a" />
+<img width="1084" alt="image" src="https://github.com/user-attachments/assets/6702b16b-e913-42d5-8621-a88723fc69b0" />
+<img width="1185" alt="image" src="https://github.com/user-attachments/assets/d54a67b6-6666-4ccc-8bd5-313750f74556" />
+<img width="1186" alt="image" src="https://github.com/user-attachments/assets/0d7b3cf6-eb6c-4d62-8546-00f4aace8cac" />
+<img width="1792" alt="image" src="https://github.com/user-attachments/assets/e3395c22-fa01-453e-a447-5f237ef89516" />
+<img width="1764" alt="image" src="https://github.com/user-attachments/assets/d2c70327-37ff-4482-84f0-7f7a14a6f3f3" />
+
+
+
 ## Quick Start
 
 ### Prerequisites
