@@ -171,24 +171,3 @@ docker-compose up -d
 3. Commit your changes (`git commit -m 'Add amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Support
-
-For support, email support@your-domain.com or join our Slack channel.
-
-## Credits
-
-- Lead Developer: [Your Name](https://github.com/your-username)
-- Contributors: List of contributors
-
-## Version History
-
-- 1.0.0
-  - Initial release
-  - Basic polling functionality
-  - Real-time updates
-  - User authentication
